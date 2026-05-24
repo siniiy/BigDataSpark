@@ -1,0 +1,67 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: bigdata_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bigdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - "./исходные данные:/data:ro"
+      - ./sql/postgres:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - bigdata_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bigdata"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: bigdata_clickhouse
+    environment:
+      CLICKHOUSE_DB: bigdata
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./sql/clickhouse:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    networks:
+      - bigdata_net
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  spark:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+    container_name: bigdata_spark
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - bigdata_net
+    restart: "no"
+
+networks:
+  bigdata_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  clickhouse_data:
